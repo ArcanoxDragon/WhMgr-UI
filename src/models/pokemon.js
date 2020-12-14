@@ -65,6 +65,22 @@ class Pokemon extends Model {
     static getById(id) {
         return Pokemon.findByPk(id);
     }
+    
+    static async getLikeId(id) {
+        const proto = await Pokemon.getById(id);
+        
+        return await Pokemon.findAll({
+            where: {
+                form: proto.form,
+                minIv: proto.minIv,
+                // ivList: proto.getDataValue("ivList"),
+                minLvl: proto.minLvl,
+                maxLvl: proto.maxLvl,
+                gender: proto.gender,
+                // city: proto.city,
+            }
+        });
+    }
 
     static deleteById(id) {
         return Pokemon.destroy({

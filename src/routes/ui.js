@@ -81,6 +81,43 @@ router.get('/pokemon/edit/:id', async (req, res) => {
     res.render('pokemon-edit', data);
 });
 
+router.get('/pokemon/edit_group/:like_id', async (req, res, next) => {
+    try {
+        const data = { ...defaultData };
+        data.servers = validateRoles(req, res);
+        const likeId = req.params.like_id;
+        data.id = likeId;
+        
+        // Get the "prototype" Pokemon; probably the lowest-ID Pokemon in the group
+        const protoPokemon = await Pokemon.getById(likeId);
+        data.form = protoPokemon.form;
+        data.iv = protoPokemon.minIv;
+        data.iv_list = (protoPokemon.ivList || []).join('\n');
+        data.min_lvl = protoPokemon.minLvl;
+        data.max_lvl = protoPokemon.maxLvl;
+        data.genders.forEach(gender => {
+            data.selected = gender.id === protoPokemon.gender;
+        });
+        data.cities = map.buildCityList(req.session.guilds);
+        const areas = protoPokemon.city.map(x => x.toLowerCase());
+        data.cities.forEach(city => {
+            city.selected = areas.includes(city.name.toLowerCase());
+        });
+        
+        // find all other Pokemon with the same criteria
+        const allLikeProto = await Pokemon.getLikeId(likeId);
+        const allIdsLikeProto = allLikeProto.map(p => p.pokemonId);
+        data.allLikeProto = allIdsLikeProto.join(",");
+        data.pokemon = await map.getPokemonNameIdsList();
+        data.pokemon.forEach(pkmn => {
+            pkmn.selected = allIdsLikeProto.indexOf(parseInt(pkmn.id)) >= 0;
+        });
+        res.render('pokemon-edit-group', data);
+    } catch (err) {
+        next(err);
+    }
+});
+
 router.get('/pokemon/delete/:id', (req, res) => {
     const data = { ...defaultData };
     data.servers = validateRoles(req, res);
