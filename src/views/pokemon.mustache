@@ -23,6 +23,15 @@
     </ul>
     <div class="tab-content">
         <div class="tab-pane active" id="pokemon">
+            <label>List mode:</label><br>
+            <div id="display-mode-pokemon" class="btn-group btn-group-toggle" data-toggle="buttons">
+                <label class="btn btn-primary active">
+                    <input type="radio" name="display-mode-pokemon" id="dm-poke-ind" autocomplete="off" checked> {{By Pokemon}}
+                </label>
+                <label class="btn btn-primary">
+                    <input type="radio" name="display-mode-pokemon" id="dm-poke-grp" autocomplete="off"> {{By Criteria}}
+                </label>
+            </div>
             <a href="/pokemon/delete_all" role="button" style="float: right; margin-left: 5px;" class="btn btn-danger">{{Delete All}}</a>
             <a href="/pokemon/new" role="button" style="float: right; margin-right: 5px;" class="btn btn-success">{{New Pokemon Subscription}}</a>
             <br><br>
@@ -46,6 +55,14 @@
             </table>
         </div>
         <div class="tab-pane" id="pvp">
+            <div id="display-mode-pvp" class="btn-group btn-group-toggle" data-toggle="buttons">
+                <label class="btn btn-primary active">
+                    <input type="radio" name="display-mode-pvp" id="dm-pvp-ind" autocomplete="off" checked> Individual Pokemon
+                </label>
+                <label class="btn btn-primary">
+                    <input type="radio" name="display-mode-pvp" id="dm-pvp-grp" autocomplete="off"> Grouped By Criteria
+                </label>
+            </div>
             <a href="/pvp/delete_all" role="button" style="float: right; margin-left: 5px;" class="btn btn-danger">{{Delete All}}</a>
             <a href="/pvp/new" role="button" style="float: right; margin-right: 5px;" class="btn btn-success">{{New PVP Subscription}}</a>
             <br><br>
@@ -76,9 +93,11 @@
     if (!guildId) {
         window.location.href = '/';
     }
+    
+    // window hash handling
     const hash = window.location.hash;
     hash && $('ul.nav a[href="' + hash + '"]').tab('show');
-    $('.nav-tabs a').click(function (e) {
+    $('.nav-pills a').click(function (e) {
         $(this).tab('show');
         const scrollmem = $('body').scrollTop();
         window.location.hash = this.hash;
@@ -86,9 +105,11 @@
     });
 
     showError('Select a server from the dropdown menu before creating/editing/deleting any subscriptions!');
+    
+    var dataMode = get('subscription-data-mode') || 'individual';
     const table = $('#table').DataTable({
         "ajax": {
-            "url": "/api/server/" + $('#server_selector').val() + "/user/{{user_id}}?type=pokemon",
+            "url": "/api/server/" + $('#server_selector').val() + `/user/{{user_id}}?type=pokemon&disp=${dataMode}`,
             "dataSrc": "data.pokemon",
             "async": true,
             "type": "POST"
@@ -139,7 +160,7 @@
 
     const tablePVP = $('#table-pvp').DataTable({
         "ajax": {
-            "url": "/api/server/" + $('#server_selector').val() + "/user/{{user_id}}?type=pvp",
+            "url": "/api/server/" + $('#server_selector').val() + `/user/{{user_id}}?type=pvp&disp=${dataMode}`,
             "dataSrc": "data.pvp",
             "async": true,
             "type": "POST"
@@ -187,7 +208,38 @@
     });
 
     function refreshData() {
-        $("#table").DataTable().ajax.url("/api/server/" + $('#server_selector').val() + "/user/{{user_id}}?type=pokemon").load();
-        $("#table-pvp").DataTable().ajax.url("/api/server/" + $('#server_selector').val() + "/user/{{user_id}}?type=pvp").load();
+        $("#table").DataTable().ajax.url("/api/server/" + $('#server_selector').val() + `/user/{{user_id}}?type=pokemon&disp=${dataMode}`).load();
+        $("#table-pvp").DataTable().ajax.url("/api/server/" + $('#server_selector').val() + `/user/{{user_id}}?type=pvp&disp=${dataMode}`).load();
     }
+    
+    // data grouping
+    function updateDataModeButtons() {
+        if (dataMode === 'individual') {
+            $('#dm-poke-ind, #dm-pvp-ind').closest('.btn').button('toggle');
+        } else {
+            $('#dm-poke-grp, #dm-pvp-grp').closest('.btn').button('toggle');
+        }
+    }
+    
+    function changeDataMode(mode) {
+        if (mode === dataMode) {
+            return;
+        }
+        
+        dataMode = mode;
+        set('subscription-data-mode', mode);
+        refreshData();
+        
+        // this only works if done one tick later
+        setTimeout(updateDataModeButtons, 0);
+    }
+    
+    $('#dm-poke-ind, #dm-pvp-ind').change(function (e) {
+        changeDataMode('individual');
+    });
+    $('#dm-poke-grp, #dm-pvp-grp').change(function (e) {
+        changeDataMode('grouped');
+    });
+    
+    updateDataModeButtons();
 </script>

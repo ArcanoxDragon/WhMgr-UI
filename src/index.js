@@ -31,6 +31,7 @@ const utils = require('./services/utils.js');
 
     // View engine
     app.set('view engine', 'mustache');
+    app.set('view cache', false); // Uncomment this to see changes to .mustache files without restarting Node
     app.set('views', path.resolve(__dirname, 'views'));
     app.engine('mustache', mustacheExpress());
 

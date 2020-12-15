@@ -21,6 +21,7 @@ const utils = require('../services/utils.js');
 router.post('/server/:guild_id/user/:user_id', async (req, res) => {
     const { guild_id, user_id } = req.params;
     const type = req.query.type;
+    const displayMode = req.query.disp;
     switch (type) {
         case 'subscriptions':
             if (!guild_id || guild_id === null || guild_id === 'null') {
@@ -49,31 +50,71 @@ router.post('/server/:guild_id/user/:user_id', async (req, res) => {
                 showErrorJson(res, guild_id, 'Select a server from the dropdown menu before creating/editing/deleting any subscriptions!', { pokemon: [] });
                 return;
             }
-            const pokemon = await Pokemon.getAll(guild_id, user_id);
             const pokemonData = [];
-            if (pokemon) {
-                for (let pkmn of pokemon) {
-                    pkmn = pkmn.toJSON();
-                    const pkmnName = Localizer.getPokemonName(pkmn.pokemonId);
-                    const pkmnIcon = await Localizer.getPokemonIcon(pkmn.pokemonId);
-                    pkmn.name = `<img src='${pkmnIcon}' width='auto' height='32'>&nbsp;${pkmnName}`;
-                    pkmn.cp = `${pkmn.minCp}-4096`;
-                    pkmn.iv = pkmn.minIv;
-                    pkmn.ivList = pkmn.ivList.length;//(JSON.parse(pkmn.iv_list || '[]') || []).length;
-                    pkmn.lvl = `${pkmn.minLvl}-${pkmn.maxLvl}`;
-                    pkmn.gender = pkmn.gender === '*'
-                        ? 'All'
-                        : pkmn.gender == 'm'
-                            ? 'Male Only'
-                            : 'Female Only';
-                    pkmn.genderName = pkmn.gender === '*' ? 'All' : pkmn.gender;
-                    pkmn.city = formatAreas(guild_id, pkmn.city);
-                    pkmn.buttons = `
-                    <a href='/pokemon/edit/${pkmn.id}'><button type='button'class='btn btn-sm btn-primary'>Edit</button></a>
-                    &nbsp;
-                    <a href='/pokemon/delete/${pkmn.id}'><button type='button'class='btn btn-sm btn-danger'>Delete</button></a>
-                    `;
-                    pokemonData.push(pkmn);
+            if (displayMode === 'grouped') {
+                const groups = await Pokemon.getAllGroups(guild_id, user_id);
+                if (groups) {
+                    for (const proto of groups) {
+                        const allLikeProto = await Pokemon.getLikeId(proto.id);
+                        const displayPokes = allLikeProto.slice(0, 5);
+                        const displayIcons = await Promise.all(displayPokes.map(async p => {
+                            const name = Localizer.getPokemonName(p.pokemonId);
+                            const icon = await Localizer.getPokemonIcon(p.pokemonId);
+                            return `<img src='${icon}' width='auto' height='32' alt='${name}' title='${name}'>`;
+                        }));
+                        const numHidden = allLikeProto.length - displayPokes.length;
+                        const moreStr = numHidden > 0 ? ` <span class='text-muted'>+${numHidden} more</span>` : '';
+                        const allNames = allLikeProto.map(p => Localizer.getPokemonName(p.pokemonId)).join(',');
+                        const pkmn = {};
+                        
+                        pkmn.pokemonId = displayPokes.map(p => p.pokemonId).join(', ') + moreStr;
+                        pkmn.name = displayIcons.join('') + moreStr + `<span style='display: none'>${allNames}</span>`; // all names in hidden span for searching purposes
+                        pkmn.form = proto.form;
+                        pkmn.cp = `${proto.minCp}-4096`;
+                        pkmn.iv = proto.minIv;
+                        pkmn.ivList = proto.ivList.length;
+                        pkmn.lvl = `${proto.minLvl}-${proto.maxLvl}`;
+                        pkmn.gender = proto.gender === '*'
+                            ? 'All'
+                            : proto.gender == 'm'
+                                ? 'Male Only'
+                                : 'Female Only';
+                        pkmn.genderName = proto.gender === '*' ? 'All' : proto.gender;
+                        pkmn.city = formatAreas(guild_id, proto.city);
+                        pkmn.buttons = `
+                        <a href='/pokemon/edit_group/${proto.id}'><button type='button'class='btn btn-sm btn-primary'>Edit</button></a>
+                        &nbsp;
+                        <a href='/pokemon/delete_group/${proto.id}'><button type='button'class='btn btn-sm btn-danger'>Delete</button></a>
+                        `;
+                        pokemonData.push(pkmn);
+                    }
+                }
+            } else {
+                const pokemon = await Pokemon.getAll(guild_id, user_id);
+                if (pokemon) {
+                    for (let pkmn of pokemon) {
+                        pkmn = pkmn.toJSON();
+                        const pkmnName = Localizer.getPokemonName(pkmn.pokemonId);
+                        const pkmnIcon = await Localizer.getPokemonIcon(pkmn.pokemonId);
+                        pkmn.name = `<img src='${pkmnIcon}' width='auto' height='32' alt='${pkmnName}' title='${pkmnName}'>&nbsp;${pkmnName}`;
+                        pkmn.cp = `${pkmn.minCp}-4096`;
+                        pkmn.iv = pkmn.minIv;
+                        pkmn.ivList = pkmn.ivList.length;//(JSON.parse(pkmn.iv_list || '[]') || []).length;
+                        pkmn.lvl = `${pkmn.minLvl}-${pkmn.maxLvl}`;
+                        pkmn.gender = pkmn.gender === '*'
+                            ? 'All'
+                            : pkmn.gender == 'm'
+                                ? 'Male Only'
+                                : 'Female Only';
+                        pkmn.genderName = pkmn.gender === '*' ? 'All' : pkmn.gender;
+                        pkmn.city = formatAreas(guild_id, pkmn.city);
+                        pkmn.buttons = `
+                        <a href='/pokemon/edit/${pkmn.id}'><button type='button'class='btn btn-sm btn-primary'>Edit</button></a>
+                        &nbsp;
+                        <a href='/pokemon/delete/${pkmn.id}'><button type='button'class='btn btn-sm btn-danger'>Delete</button></a>
+                        `;
+                        pokemonData.push(pkmn);
+                    }
                 }
             }
             res.json({ data: { pokemon: pokemonData } });
@@ -83,21 +124,25 @@ router.post('/server/:guild_id/user/:user_id', async (req, res) => {
                 showErrorJson(res, guild_id, 'Select a server from the dropdown menu before creating/editing/deleting any subscriptions!', { pvp: [] });
                 return;
             }
-            const pvp = await PVP.getAll(guild_id, user_id);
             const pvpData = [];
-            if (pvp) {
-                for (let pvpSub of pvp) {
-                    pvpSub = pvpSub.toJSON();
-                    const pkmnName = Localizer.getPokemonName(pvpSub.pokemonId);
-                    const pkmnIcon = await Localizer.getPokemonIcon(pvpSub.pokemonId);
-                    pvpSub.name = `<img src='${pkmnIcon}' width='auto' height='32'>&nbsp;${pkmnName}`;
-                    pvpSub.city = formatAreas(guild_id, pvpSub.city);
-                    pvpSub.buttons = `
-                    <a href='/pvp/edit/${pvpSub.id}'><button type='button'class='btn btn-sm btn-primary'>Edit</button></a>
-                    &nbsp;
-                    <a href='/pvp/delete/${pvpSub.id}'><button type='button'class='btn btn-sm btn-danger'>Delete</button></a>
-                    `;
-                    pvpData.push(pvpSub);
+            if (displayMode === 'grouped') {
+                // TODO:
+            } else {
+                const pvp = await PVP.getAll(guild_id, user_id);
+                if (pvp) {
+                    for (let pvpSub of pvp) {
+                        pvpSub = pvpSub.toJSON();
+                        const pkmnName = Localizer.getPokemonName(pvpSub.pokemonId);
+                        const pkmnIcon = await Localizer.getPokemonIcon(pvpSub.pokemonId);
+                        pvpSub.name = `<img src='${pkmnIcon}' width='auto' height='32'>&nbsp;${pkmnName}`;
+                        pvpSub.city = formatAreas(guild_id, pvpSub.city);
+                        pvpSub.buttons = `
+                        <a href='/pvp/edit/${pvpSub.id}'><button type='button'class='btn btn-sm btn-primary'>Edit</button></a>
+                        &nbsp;
+                        <a href='/pvp/delete/${pvpSub.id}'><button type='button'class='btn btn-sm btn-danger'>Delete</button></a>
+                        `;
+                        pvpData.push(pvpSub);
+                    }
                 }
             }
             res.json({ data: { pvp: pvpData } });

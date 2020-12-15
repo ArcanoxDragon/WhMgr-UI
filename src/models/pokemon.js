@@ -48,6 +48,22 @@ class Pokemon extends Model {
             }
         });
     }
+    
+    static getAllGroups(guildId, userId) {
+        return Pokemon.findAll({
+            attributes: {
+                include: [
+                    [sequelize.fn('MIN', sequelize.col('id')), 'id'],
+                ],
+                exclude: ['subscriptionId', 'guildId', 'userId', 'pokemonId'],
+            },
+            where: {
+                guildId: guildId,
+                userId: userId,
+            },
+            group: ['form', 'minCp', 'minIv', 'minLvl', 'maxLvl', 'gender', 'ivList', 'city'],
+        });
+    }
 
     static getByPokemon(guildId, userId, pokemonId, form) {
         return Pokemon.findOne({
@@ -73,12 +89,20 @@ class Pokemon extends Model {
             where: {
                 form: proto.form,
                 minIv: proto.minIv,
-                // ivList: proto.getDataValue("ivList"),
                 minLvl: proto.minLvl,
                 maxLvl: proto.maxLvl,
                 gender: proto.gender,
-                // city: proto.city,
-            }
+                subscriptionId: proto.subscriptionId,
+                guildId: proto.guildId,
+                userId: proto.userId,
+                [Op.and]: [
+                    sequelize.where(sequelize.col('iv_list'), proto.getDataValue('ivList')),
+                    sequelize.where(sequelize.col('city'), proto.getDataValue('city')),
+                ],
+            },
+            order: [
+                ['pokemonId', 'ASC'],
+            ]
         });
     }
 
