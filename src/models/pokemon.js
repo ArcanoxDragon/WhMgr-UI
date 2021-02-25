@@ -37,7 +37,7 @@ class Pokemon extends Model {
         const results = await Pokemon.bulkCreate(pokemon, {
             updateOnDuplicate: Pokemon.fromPokemonFields,
         });
-        console.log('[Pokemon] Results:', results);
+        // console.log('[Pokemon] Results:', results);
     }
 
     static getAll(guildId, userId) {

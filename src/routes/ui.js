@@ -125,6 +125,13 @@ router.get('/pokemon/delete/:id', (req, res) => {
     res.render('pokemon-delete', data);
 });
 
+router.get('/pokemon/delete_group/:id', (req, res) => {
+    const data = { ...defaultData };
+    data.servers = validateRoles(req, res);
+    data.id = req.params.id;
+    res.render('pokemon-delete-group', data);
+});
+
 router.get('/pokemon/delete_all', (req, res) => {
     const data = { ...defaultData };
     data.servers = validateRoles(req, res);

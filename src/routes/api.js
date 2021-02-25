@@ -306,8 +306,70 @@ router.post('/server/:guild_id/user/:user_id', async (req, res) => {
     }
 });
 
-
 // Pokemon routes
+async function createOrUpdatePokemon(user_id, guild_id, subscriptionId, ids, criteria, concatAreas) {
+    const {
+        form,
+        iv,
+        ivList,
+        min_lvl,
+        max_lvl,
+        gender,
+        areas,
+    } = criteria;
+    const dbObjects = [];
+    
+    if (form && form.trim().length === 0) {
+        form = null;
+    }
+    
+    for (const pokemonId of ids) {
+        let existing = await Pokemon.getByPokemon(guild_id, user_id, pokemonId, form);
+        if (existing) {
+            existing.minCp = 0;
+            existing.minIv = iv || 0;
+            existing.ivList = ivList;
+            existing.minLvl = min_lvl || 0;
+            existing.maxLvl = max_lvl || 35;
+            existing.gender = gender || '*';
+            existing.city = utils.arrayUnique(concatAreas ? existing.city.concat(areas) : areas).sort(utils.caseInsensitiveSort);
+        } else {
+            existing = Pokemon.build({
+                id: 0,
+                subscriptionId: subscriptionId,
+                guildId: guild_id,
+                userId: user_id,
+                pokemonId: pokemonId,
+                form: form || null,
+                minCp: 0,
+                minIv: isUltraRarePokemon(pokemonId) ? 0 : iv || 0,
+                ivList: ivList,
+                minLvl: min_lvl || 0,
+                maxLvl: max_lvl || 35,
+                gender: gender || '*',
+                city: [...areas].sort(utils.caseInsensitiveSort),
+            });
+        }
+        dbObjects.push(existing.toJSON());
+    }
+    
+    await Pokemon.create(dbObjects);
+}
+
+async function deletePokemon(id) {
+    const exists = await Pokemon.getById(id);
+    if (exists) {
+        const result = await Pokemon.deleteById(id);
+        if (result) {
+            return true;
+        } else {
+            throw new Error(`Failed to delete Pokemon subscription ${id}`);
+        }
+    } else {
+        throw new Error(`Failed to find Pokemon subscription ${id}`);
+    }
+}
+
 router.post('/pokemon/new', async (req, res) => {
     const {
         guild_id,
@@ -327,40 +389,20 @@ router.post('/pokemon/new', async (req, res) => {
         showError(res, 'pokemon-new', `Failed to get user subscription ID for GuildId: ${guild_id} and UserId: ${user_id}`);
         return;
     }
-    const sql = [];
     const split = pokemon.split(',');
     const ivList = iv_list ? iv_list.replace('\r', '').split('\n') : [];
-    for (const pokemonId of split) {
-        let exists = await Pokemon.getByPokemon(guild_id, user_id, pokemonId, form);
-        if (exists) {
-            exists.minCp = 0;
-            exists.minIv = iv || 0;
-            exists.ivList = ivList;
-            exists.minLvl = min_lvl || 0;
-            exists.maxLvl = max_lvl || 35;
-            exists.gender = gender || '*';
-            exists.city = utils.arrayUnique(exists.city.concat(areas));
-        } else {
-            exists = Pokemon.build({
-                id: 0,
-                subscriptionId: subscriptionId,
-                guildId: guild_id,
-                userId: user_id,
-                pokemonId: pokemonId,
-                form: form || null,
-                minCp: 0,
-                minIv: isUltraRarePokemon(pokemonId) ? 0 : iv || 0,
-                ivList: ivList,
-                minLvl: min_lvl || 0,
-                maxLvl: max_lvl || 35,
-                gender: gender || '*',
-                city: areas,
-            });
-        }
-        sql.push(exists.toJSON());
-    }
+    const criteria = {
+        form,
+        iv,
+        ivList,
+        min_lvl,
+        max_lvl,
+        gender,
+        areas,
+    };
+    
     try {
-        await Pokemon.create(sql);
+        await createOrUpdatePokemon(user_id, guild_id, subscriptionId, split, criteria, /* concatAreas: */ true);
     } catch (err) {
         console.error(err);
         showError(res, 'pokemon-new', `Failed to create Pokemon ${pokemon} subscriptions for guild: ${guild_id} user: ${user_id}`);
@@ -411,23 +453,105 @@ router.post('/pokemon/edit/:id', async (req, res) => {
 
 router.post('/pokemon/delete/:id', async (req, res) => {
     const id = req.params.id;
-    const exists = await Pokemon.getById(id);
-    if (exists) {
-        const result = await Pokemon.deleteById(id);
-        if (result) {
-            // Success
-            console.log('Pokemon subscription', id, 'deleted successfully.');
-        } else {
-            showError(res, 'pokemon-delete', `Failed to delete Pokemon subscription ${id}`);
-            return;
-        }
-    } else {
-        // Does not exist
-        showError(res, 'pokemon-delete', `Failed to find Pokemon subscription ${id}`);
+    
+    try {
+        await deletePokemon(id);
+        
+        // Success
+        console.log('Pokemon subscription', id, 'deleted successfully.');
+    } catch (err) {
+        showError(res, 'pokemon-delete', err.message);
         return;
     }
+    
     res.redirect('/pokemon');
 });
+
+router.post('/pokemon/edit_group/:id', async (req, res) => {
+    const id = req.params.id;
+    const {
+        guild_id,
+        pokemon,
+        form,
+        iv,
+        iv_list,
+        min_lvl,
+        max_lvl,
+        gender,
+        city
+    } = req.body;
+    const user_id = req.session.user_id;
+    const areas = getAreas(guild_id, city);
+    const subscriptionId = await Subscription.getSubscriptionId(guild_id, user_id);
+    if (!subscriptionId) {
+        showError(res, 'pokemon-edit-group', `Failed to get user subscription ID for GuildId: ${guild_id} and UserId: ${user_id}`);
+        return;
+    }
+    const proto = await Pokemon.getById(id);
+    if (!proto) {
+        showError(res, 'pokemon-edit-group', `No matching subscription group: ${id}`);
+        return;
+    }
+    const allLikeProto = await Pokemon.getLikeId(proto.id);
+    const oldPokes = allLikeProto.map(p => p.pokemonId);
+    const newPokes = pokemon.split(',').map(id => +id).filter(id => !isNaN(id));
+    
+    // Figure out the delta (add/change/delete) so we can perform the appropriate action on each Pokemon
+    const addedPokes = utils.arrayUnique(newPokes.filter(p => oldPokes.indexOf(p) < 0));
+    const updatedPokes = utils.arrayUnique(newPokes.filter(p => oldPokes.indexOf(p) >= 0));
+    const removedPokes = utils.arrayUnique(oldPokes.filter(p => newPokes.indexOf(p) < 0));
+    const addOrUpdatePokes = addedPokes.concat(updatedPokes);
+    
+    // Apply the changes as necessary
+    const ivList = iv_list ? iv_list.replace('\r', '').split('\n') : [];
+    const criteria = {
+        form,
+        iv,
+        ivList,
+        min_lvl,
+        max_lvl,
+        gender,
+        areas,
+    };
+    
+    try {
+        // Adds/updates
+        await createOrUpdatePokemon(user_id, guild_id, subscriptionId, addOrUpdatePokes, criteria);
+        // Deletes
+        for (const poke of removedPokes) {
+            const id = allLikeProto.find(p => p.pokemonId === poke).id;
+            await deletePokemon(id);
+        }
+    } catch (err) {
+        console.error(err);
+        showError(res, 'pokemon-edit-group', err.message);
+        return;
+    }
+    
+    res.redirect('/pokemon');
+});
+
+router.post('/pokemon/delete_group/:id', async (req, res) => {
+    const id = req.params.id;
+    const proto = await Pokemon.getById(id);
+    if (!proto) {
+        showError(res, 'pokemon-delete-group', `No matching subscription group: ${id}`);
+        return;
+    }
+    const allLikeProto = await Pokemon.getLikeId(proto.id);
+    
+    try {
+        for (const poke of allLikeProto) {
+            await deletePokemon(poke.id);
+        }
+    } catch (err) {
+        console.error(err);
+        showError(res, 'pokemon-delete-group', err.message);
+        return;
+    }
+    
+    res.redirect('/pokemon');
+})
 
 router.post('/pokemon/delete_all', async (req, res) => {
     const { guild_id } = req.body;
@@ -1129,13 +1253,13 @@ const getAreas = (guildId, city) => {
     } else {
         areas = city;
     }
-    return areas || [];
+    return (areas || []).sort(utils.caseInsensitiveSort);
 };
 
 const formatAreas = (guildId, subscriptionAreas) => {
     return utils.arraysEqual(subscriptionAreas, config.discord.guilds.filter(x => x.id === guildId)[0].geofences)
         ? 'All' // TODO: Localize
-        : subscriptionAreas.join(',');
+        : subscriptionAreas.sort(utils.caseInsensitiveSort).join(',');
 };
 
 const getRoles = (guildId, cityName) => {
