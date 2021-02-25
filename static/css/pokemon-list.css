@@ -7,11 +7,14 @@
     border-style: solid;
     border-width: 1px;
 }
-div.item {
+.pokemon-list .item {
+    width: 48px;
     vertical-align: top;
-    display: inline-block;
-    text-align: center;
+    display: inline-flex;
+    flex-flow: column;
+    align-items: center;
 }
-.caption {
-    display: block;
+.pokemon-list .item img {
+    height: 48px;
+    max-width: 48px;
 }

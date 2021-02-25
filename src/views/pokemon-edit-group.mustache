@@ -21,7 +21,7 @@
             <div id="pokemon-list" name="pokemon-list" class="pokemon-list custom-control">
             {{#pokemon}}
                 <div class="pokemon-icon-sprite item {{#selected}}active{{/selected}}" id="{{id}}" name="{{name}}" data-value="{{id}}" onclick="onPokemonClicked(this)">
-                    <img src="{{image_url}}" width="48" height="48" />
+                    <img src="{{image_url}}" />
                     <span class="caption">#{{id}}</span>
                 </div>
             {{/pokemon}}
@@ -88,7 +88,7 @@
         <br>
     </form>
     <form action="/api/pokemon/delete_group/{{id}}" method="post">
-        <button type="submit" class="btn btn-danger" onclick="return confirm('{{Are you sure that you want to delete pokemon subscription}} {{id}}?');">{{Delete}}</button>
+        <button type="submit" class="btn btn-danger" onclick="return confirm('{{Are you sure that you want to delete this group of Pokemon subscriptions}}');">{{Delete}}</button>
     </form>
 </div>
 
