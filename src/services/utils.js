@@ -102,6 +102,21 @@ const arrayUnique = (array) => {
     return newArray;
 };
 
+const caseInsensitiveSort = (first, second) => {
+    if (!first) {
+        return second ? -1 : 0;
+    }
+    
+    if (!second) {
+        return 1;
+    }
+    
+    first = first.toString();
+    second = second.toString();
+    
+    return first.toLowerCase().localeCompare(second.toLowerCase());
+};
+
 module.exports = {
     generateString,
     hasGuild,
@@ -111,4 +126,5 @@ module.exports = {
     formatDate,
     arraysEqual,
     arrayUnique,
+    caseInsensitiveSort,
 };

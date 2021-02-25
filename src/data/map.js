@@ -1,6 +1,7 @@
 'use strict';
 
 const Localizer = require('../services/locale.js');
+const utils = require('../services/utils.js');
 const config = require('../config.json');
 
 const getPokemonNameIdsList = async () => {
@@ -29,7 +30,7 @@ const buildCityList = (guilds) => {
             }));
         }
     }
-    return cities;
+    return cities.sort((a, b) => utils.caseInsensitiveSort(a.name, b.name));
 };
 
 const buildCityRoleList = (guilds) => {
